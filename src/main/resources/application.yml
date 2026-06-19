@@ -1,0 +1,109 @@
+spring:
+  application:
+    name: mms-backend
+
+  datasource:
+    url: ${DATABASE_URL:jdbc:postgresql://aws-1-ap-south-1.pooler.supabase.com:5432/postgres}
+    username: ${DATABASE_USERNAME:postgres.wwxyshxrerouvdnvfwqr}
+    password: ${DATABASE_PASSWORD:posgres123@}
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: true
+        jdbc:
+          batch_size: 50
+        order_inserts: true
+        order_updates: true
+    show-sql: ${SHOW_SQL:true}
+
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+
+  mail:
+    host: smtp.gmail.com
+    port: 587
+    username: ${MAIL_USERNAME:2023200000136@seu.edu.bd}
+    password: ${MAIL_PASSWORD:xwsm xsma xmji ftqb}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+            required: true
+
+  jackson:
+    deserialization:
+      fail-on-null-for-primitives: false
+
+  cache:
+    type: caffeine
+    caffeine:
+      spec: maximumSize=1000,expireAfterWrite=10m
+    cache-names:
+      - students
+      - student
+      - classrooms
+      - dashboard
+      - defaulters
+      - users
+      - ledger
+      - balance
+      - attendance
+      - receipts
+
+  # FIX: Multipart configuration should be here, under spring
+  servlet:
+    multipart:
+      enabled: true
+      max-file-size: 20MB
+      max-request-size: 20MB
+      file-size-threshold: 2KB
+      resolve-lazily: false
+
+server:
+  tomcat:
+    max-http-form-post-size: 20MB
+    connection-timeout: 60000
+  port: ${PORT:8080}
+  servlet:
+    context-path: /api
+
+jwt:
+  secret: ${JWT_SECRET:your-secret-key-must-be-at-least-32-characters-long}
+  expiration: ${JWT_EXPIRATION:3600000}
+  refresh-expiration: ${JWT_REFRESH_EXPIRATION:1209600000}
+
+supabase:
+  url: ${SUPABASE_URL:https://wwxyshxrerouvdnvfwqr.storage.supabase.co}
+  service-role-key: ${SUPABASE_SERVICE_ROLE_KEY:eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind3eHlzaHhyZXJvdXZkbnZmd3FyIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4MTcxMzI5OCwiZXhwIjoyMDk3Mjg5Mjk4fQ.DnFEBbQut0pLxluAeRPlNk0bTLIF68SugaFfmvmPebI}
+  bucket:
+    photos: ${SUPABASE_BUCKET_PHOTOS:student-photos}
+    documents: ${SUPABASE_BUCKET_DOCUMENTS:student-docs}
+
+turnstile:
+  secret-key: ${TURNSTILE_SECRET_KEY:0x4AAAAAACKTd9VgVagm-LI7}
+  required: ${TURNSTILE_REQUIRED:false}
+
+storage:
+  max-file-size: ${MAX_FILE_SIZE:20971520}
+
+email:
+  from: ${MAIL_FROM:mms@madrasa.edu}
+  reminder-cron: ${REMINDER_CRON:0 0 12 28 * ?}
+
+app:
+  url: ${APP_URL:http://localhost:3000}
+
+logging:
+  level:
+    com.mms: ${LOG_LEVEL:INFO}
+    org.springframework.security: ${LOG_LEVEL:INFO}
+    org.hibernate.SQL: ${LOG_LEVEL:INFO}
+    org.springframework.web.multipart: DEBUG  # Add this for debugging
