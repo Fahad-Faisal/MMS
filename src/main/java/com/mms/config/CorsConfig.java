@@ -19,6 +19,7 @@ public class CorsConfig {
                 "http://localhost:3000",
                 "https://mms.netlify.app",
                 "https://*.onrender.com",
+                "https://nextgen-app-builder-final-version.onrender.com",
                 "https://*.netlify.app"
 
         ));
