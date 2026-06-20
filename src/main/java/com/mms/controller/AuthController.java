@@ -1,12 +1,12 @@
 // src/main/java/com/mms/controller/AuthController.java
 package com.mms.controller;
 
-import com.mms.dto.request.LoginRequest;
-import com.mms.dto.request.RefreshTokenRequest;
-import com.mms.dto.request.TwoFactorVerifyRequest;
+import com.mms.dto.request.*;
 import com.mms.dto.response.ApiError;
 import com.mms.dto.response.AuthResponse;
+import com.mms.dto.response.ForgotPasswordResponse;
 import com.mms.dto.response.LoginResponse;
+import com.mms.exception.InvalidCredentialsException;
 import com.mms.service.AuthService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -51,6 +51,50 @@ public class AuthController {
                             .status(400)
                             .message(e.getMessage())
                             .code("2FA_FAILED")
+                            .build());
+        }
+    }
+    // src/main/java/com/mms/controller/AuthController.java
+// Add these methods to the existing AuthController
+
+    @PostMapping("/forgot-password")
+    public ResponseEntity<?> forgotPassword(@Valid @RequestBody ForgotPasswordRequest request) {
+        try {
+            log.debug("Forgot password request received for username: {}", request.getUsername());
+            ForgotPasswordResponse response = authService.forgotPassword(request);
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            log.error("Forgot password failed for username: {}", request.getUsername(), e);
+            return ResponseEntity.status(400)
+                    .body(ApiError.builder()
+                            .status(400)
+                            .message(e.getMessage())
+                            .code("FORGOT_PASSWORD_FAILED")
+                            .build());
+        }
+    }
+
+    @PostMapping("/forgot-password/reset")
+    public ResponseEntity<?> resetForgottenPassword(@Valid @RequestBody ForgotPasswordResetRequest request) {
+        try {
+            log.debug("Password reset request received");
+            authService.resetForgottenPassword(request);
+            return ResponseEntity.noContent().build();
+        } catch (InvalidCredentialsException e) {
+            log.error("Password reset failed: {}", e.getMessage());
+            return ResponseEntity.status(400)
+                    .body(ApiError.builder()
+                            .status(400)
+                            .message(e.getMessage())
+                            .code(e.getMessage().contains("attempt") ? "INVALID_CODE" : "TOO_MANY_ATTEMPTS")
+                            .build());
+        } catch (Exception e) {
+            log.error("Password reset failed", e);
+            return ResponseEntity.status(400)
+                    .body(ApiError.builder()
+                            .status(400)
+                            .message(e.getMessage())
+                            .code("RESET_FAILED")
                             .build());
         }
     }

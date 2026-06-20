@@ -97,6 +97,7 @@ storage:
 email:
   from: ${MAIL_FROM:mms@madrasa.edu}
   reminder-cron: ${REMINDER_CRON:0 0 12 28 * ?}
+  enabled: true
 
 app:
   url: ${APP_URL:http://localhost:3000}

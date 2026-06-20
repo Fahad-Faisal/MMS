@@ -1,9 +1,12 @@
 // src/main/java/com/mms/service/AuthService.java
 package com.mms.service;
 
+import com.mms.dto.request.ForgotPasswordRequest;
+import com.mms.dto.request.ForgotPasswordResetRequest;
 import com.mms.dto.request.LoginRequest;
 import com.mms.dto.request.TwoFactorVerifyRequest;
 import com.mms.dto.response.AuthResponse;
+import com.mms.dto.response.ForgotPasswordResponse;
 import com.mms.dto.response.LoginResponse;
 import com.mms.entity.User;
 import com.mms.entity.TwoFactorChallenge;
@@ -282,6 +285,144 @@ public class AuthService {
                 .challengeId(challengeId)
                 .emailHint(maskEmail(user.getEmail()))
                 .build();
+    }
+    // src/main/java/com/mms/service/AuthService.java
+// Add these methods to the existing AuthService
+
+    @Transactional
+    public ForgotPasswordResponse forgotPassword(ForgotPasswordRequest request) {
+        log.info("Forgot password request for username: {}", request.getUsername());
+
+        // Check if user exists and has email
+        User user = userRepository.findByUsername(request.getUsername()).orElse(null);
+
+        String challengeId = UUID.randomUUID().toString();
+        String emailHint = null;
+
+        if (user != null && user.getEmail() != null && !user.getEmail().isEmpty()) {
+            // Generate code
+            String code = generateVerificationCode();
+
+            // Delete any existing password reset challenges for this user
+            challengeRepository.deleteAllPasswordResetChallengesByUserId(user.getId());
+
+            // Create new challenge
+            TwoFactorChallenge challenge = TwoFactorChallenge.builder()
+                    .id(challengeId)
+                    .userId(user.getId())
+                    .codeHash(passwordEncoder.encode(code))
+                    .purpose("PASSWORD_RESET")
+                    .expiresAt(LocalDateTime.now().plusMinutes(CODE_TTL_MINUTES))
+                    .attempts(0)
+                    .build();
+
+            challengeRepository.save(challenge);
+
+            // Send email
+            try {
+                emailService.sendTwoFactorCode(user.getEmail(), user.getFullName(), code, "PASSWORD_RESET");
+                log.info("Password reset code sent to: {}", user.getEmail());
+            } catch (Exception e) {
+                log.error("Failed to send password reset code to: {}", user.getEmail(), e);
+            }
+
+            emailHint = maskEmail(user.getEmail());
+        } else {
+            // Generate a synthetic challenge ID to prevent enumeration
+            // This will fail verification later
+            log.warn("Password reset requested for non-existent user or user without email: {}",
+                    request.getUsername());
+            emailHint = "the email on file";
+        }
+
+        // Always return 200 to prevent user enumeration
+        return ForgotPasswordResponse.builder()
+                .challengeId(challengeId)
+                .emailHint(emailHint)
+                .build();
+    }
+
+    @Transactional
+    public void resetForgottenPassword(ForgotPasswordResetRequest request) {
+        log.info("Password reset request for challenge: {}", request.getChallengeId());
+
+        // Validate request
+        if (request.getChallengeId() == null || request.getChallengeId().isEmpty()) {
+            throw new InvalidCredentialsException("Challenge ID is required");
+        }
+        if (request.getCode() == null || request.getCode().isEmpty()) {
+            throw new InvalidCredentialsException("Verification code is required");
+        }
+        if (request.getCode().length() != 6) {
+            throw new InvalidCredentialsException("Verification code must be 6 digits");
+        }
+        if (request.getNewPassword() == null || request.getNewPassword().length() < 6) {
+            throw new InvalidCredentialsException("Password must be at least 6 characters");
+        }
+
+        // Find challenge
+        TwoFactorChallenge challenge = challengeRepository.findById(request.getChallengeId())
+                .orElseThrow(() -> {
+                    log.warn("Password reset failed - challenge not found: {}", request.getChallengeId());
+                    return new InvalidCredentialsException("Invalid or expired code");
+                });
+
+        // Check purpose
+        if (!"PASSWORD_RESET".equals(challenge.getPurpose())) {
+            log.warn("Password reset failed - invalid challenge purpose: {}", challenge.getPurpose());
+            challengeRepository.delete(challenge);
+            throw new InvalidCredentialsException("Invalid challenge");
+        }
+
+        // Check expiration
+        if (challenge.getExpiresAt().isBefore(LocalDateTime.now())) {
+            challengeRepository.delete(challenge);
+            log.warn("Password reset failed - challenge expired: {}", request.getChallengeId());
+            throw new InvalidCredentialsException("Code has expired. Please request a new one.");
+        }
+
+        // Check attempts
+        if (challenge.getAttempts() >= MAX_ATTEMPTS) {
+            challengeRepository.delete(challenge);
+            log.warn("Password reset failed - too many attempts for challenge: {}", request.getChallengeId());
+            throw new InvalidCredentialsException("Too many failed attempts. Please request a new code.");
+        }
+
+        // Verify code using BCrypt matches
+        boolean codeMatches = passwordEncoder.matches(request.getCode(), challenge.getCodeHash());
+
+        if (!codeMatches) {
+            challenge.setAttempts(challenge.getAttempts() + 1);
+            challengeRepository.save(challenge);
+            int remainingAttempts = MAX_ATTEMPTS - challenge.getAttempts();
+            log.warn("Password reset failed - incorrect code for challenge: {}, attempts: {}/{}",
+                    request.getChallengeId(), challenge.getAttempts(), MAX_ATTEMPTS);
+            throw new InvalidCredentialsException(String.format(
+                    "Incorrect verification code. %d attempt(s) remaining.",
+                    remainingAttempts
+            ));
+        }
+
+        // Get user
+        User user = userRepository.findById(challenge.getUserId())
+                .orElseThrow(() -> {
+                    log.error("Password reset failed - user not found: {}", challenge.getUserId());
+                    return new ResourceNotFoundException("User not found");
+                });
+
+        // Update password
+        user.setPasswordHash(passwordEncoder.encode(request.getNewPassword()));
+        userRepository.save(user);
+
+        // Delete challenge
+        challengeRepository.delete(challenge);
+
+        // Log audit
+        auditService.logAudit(user.getId(), user.getFullName(), "PASSWORD_RESET", "user", user.getId());
+
+        log.info("Password reset successful for user: {}", user.getUsername());
+
+        // Note: Do NOT auto-login the user. They must sign in fresh.
     }
 
     /**

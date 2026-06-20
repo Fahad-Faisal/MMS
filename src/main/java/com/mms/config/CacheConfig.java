@@ -30,7 +30,8 @@ public class CacheConfig {
                 "balance",
                 "attendance",
                 "receipts",
-                "classes"
+                "classes",
+                "team"
         ));
         cacheManager.setCaffeine(Caffeine.newBuilder()
                 .expireAfterWrite(10, TimeUnit.MINUTES)
