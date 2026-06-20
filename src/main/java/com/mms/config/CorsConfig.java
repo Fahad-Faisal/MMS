@@ -18,7 +18,9 @@ public class CorsConfig {
                 "http://localhost:5174",
                 "http://localhost:3000",
                 "https://mms.netlify.app",
+                "https://*.onrender.com",
                 "https://*.netlify.app"
+
         ));
         config.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         config.setAllowedHeaders(Arrays.asList("Authorization", "Content-Type"));
