@@ -1,3 +1,4 @@
+// src/main/java/com/mms/dto/response/AttendanceSyncResponse.java
 package com.mms.dto.response;
 
 import lombok.Builder;
@@ -14,7 +15,8 @@ public class AttendanceSyncResponse {
     @Builder
     public static class SyncResult {
         private String clientId;
-        private Boolean ok;
+        private Boolean success;
         private String serverId;
+        private String message;
     }
 }

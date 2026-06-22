@@ -1,17 +1,22 @@
 // src/main/java/com/mms/service/StudentService.java
 package com.mms.service;
 
+import com.mms.dto.request.BulkClassUpdateRequest;
 import com.mms.dto.request.StudentRequest;
 import com.mms.dto.response.BalanceResponse;
+import com.mms.entity.Classroom;
 import com.mms.entity.LedgerEntry;
 import com.mms.entity.Student;
 import com.mms.entity.StudentDocument;
 import com.mms.enums.StudentStatus;
+import com.mms.exception.BusinessException;
 import com.mms.exception.ResourceNotFoundException;
+import com.mms.repository.ClassroomRepository;
 import com.mms.repository.LedgerEntryRepository;
 import com.mms.repository.StudentRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.cache.CacheManager;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.CachePut;
 import org.springframework.cache.annotation.Cacheable;
@@ -21,45 +26,49 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDateTime;
-import java.util.ArrayList;
 import java.util.List;
-@Slf4j
+
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class StudentService {
     private final StudentRepository studentRepository;
     private final LedgerEntryRepository ledgerRepository;
+    private final ClassroomRepository classroomRepository;
     private final StorageService storageService;
     private final AuditService auditService;
+    private final CacheManager cacheManager;
 
     @Cacheable(value = "student", key = "#id")
     public Student getStudent(String id) {
-        return studentRepository.findById(id)
+        Student student = studentRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Student not found"));
+        populateClassroomName(student);
+        return student;
     }
 
-    // src/main/java/com/mms/service/StudentService.java - Update searchStudents method
-
-    @Cacheable(value = "students", key = "{#search, #className, #status, #page, #pageSize}")
-    public Page<Student> searchStudents(String search, String className, String status, int page, int pageSize) {
+    @Cacheable(value = "students", key = "{#search, #className, #classroomId, #status, #page, #pageSize}")
+    public Page<Student> searchStudents(String search, String className, String classroomId,
+                                        String status, int page, int pageSize) {
         Pageable pageable = PageRequest.of(page - 1, pageSize);
-
-        // Convert status string to enum if provided
-        String statusValue = null;
+        StudentStatus statusEnum = null;
         if (status != null && !status.isEmpty()) {
             try {
-                StudentStatus.valueOf(status);
-                statusValue = status;
+                statusEnum = StudentStatus.valueOf(status);
             } catch (IllegalArgumentException e) {
-                log.warn("Invalid status value: {}", status);
+                // Invalid status, ignore
             }
         }
 
-        return studentRepository.searchStudents(search, className, statusValue, pageable);
+        Page<Student> students = studentRepository.searchStudents(
+                search, className, classroomId, statusEnum, pageable
+        );
+
+        students.getContent().forEach(this::populateClassroomName);
+        return students;
     }
 
     @Transactional
@@ -73,6 +82,10 @@ public class StudentService {
             throw new RuntimeException("Roll number already exists");
         }
 
+        if (request.getClassroomId() != null) {
+            validateClassroomAssignment(request.getClassroomId(), request.getClassName());
+        }
+
         Student student = Student.builder()
                 .rollNo(request.getRollNo())
                 .fullName(request.getFullName())
@@ -80,6 +93,7 @@ public class StudentService {
                 .motherName(request.getMotherName())
                 .dateOfBirth(request.getDateOfBirth())
                 .className(request.getClassName())
+                .classroomId(request.getClassroomId())
                 .guardianPhone(request.getGuardianPhone())
                 .guardianEmail(request.getGuardianEmail())
                 .address(request.getAddress())
@@ -90,6 +104,11 @@ public class StudentService {
                 .build();
 
         Student saved = studentRepository.save(student);
+
+        if (request.getClassroomId() != null) {
+            addStudentToClassroom(request.getClassroomId(), saved.getId());
+        }
+
         auditService.logAudit(getCurrentUserId(), getCurrentUserName(), "CREATE_STUDENT", "student", saved.getId());
         return saved;
     }
@@ -110,6 +129,18 @@ public class StudentService {
                 throw new RuntimeException("Roll number already exists");
             }
             student.setRollNo(request.getRollNo());
+        }
+
+        if (request.getClassroomId() != null && !request.getClassroomId().equals(student.getClassroomId())) {
+            String className = request.getClassName() != null ? request.getClassName() : student.getClassName();
+            validateClassroomAssignment(request.getClassroomId(), className);
+
+            if (student.getClassroomId() != null) {
+                removeStudentFromClassroom(student.getClassroomId(), student.getId());
+            }
+
+            addStudentToClassroom(request.getClassroomId(), student.getId());
+            student.setClassroomId(request.getClassroomId());
         }
 
         if (request.getFullName() != null) student.setFullName(request.getFullName());
@@ -137,6 +168,12 @@ public class StudentService {
             @CacheEvict(value = "defaulters", allEntries = true)
     })
     public void deleteStudent(String id) {
+        Student student = getStudent(id);
+
+        if (student.getClassroomId() != null) {
+            removeStudentFromClassroom(student.getClassroomId(), student.getId());
+        }
+
         studentRepository.deleteById(id);
         auditService.logAudit(getCurrentUserId(), getCurrentUserName(), "DELETE_STUDENT", "student", id);
     }
@@ -148,27 +185,17 @@ public class StudentService {
     })
     public StudentDocument uploadDocument(String studentId, MultipartFile file) {
         Student student = getStudent(studentId);
-
-        // Upload to Supabase Storage
-        String url = storageService.uploadFile(file, "students", studentId);
-        String storageKey = storageService.getStorageKey();
-
-
+        String url = storageService.uploadFile(file, "documents", studentId);
 
         StudentDocument document = StudentDocument.builder()
-                .fileName(StringUtils.cleanPath(file.getOriginalFilename()))
+                .fileName(file.getOriginalFilename())
                 .mimeType(file.getContentType())
-                .storageKey(storageKey)
+                .storageKey(storageService.getStorageKey())
                 .url(url)
-                .uploadedAt(LocalDateTime.now())
                 .build();
 
-        if (student.getDocuments() == null) {
-            student.setDocuments(new ArrayList<>());
-        }
         student.getDocuments().add(document);
         studentRepository.save(student);
-
         auditService.logAudit(getCurrentUserId(), getCurrentUserName(), "UPLOAD_DOCUMENT", "student", studentId);
         return document;
     }
@@ -199,13 +226,123 @@ public class StudentService {
                 .build();
     }
 
+    @Transactional
+    @Caching(evict = {
+            @CacheEvict(value = "students", allEntries = true),
+            @CacheEvict(value = "dashboard", allEntries = true),
+            @CacheEvict(value = "defaulters", allEntries = true)
+    })
+    public int bulkUpdateClass(BulkClassUpdateRequest request) {
+        Classroom targetClassroom = null;
+        if (request.getClassroomId() != null) {
+            targetClassroom = classroomRepository.findById(request.getClassroomId())
+                    .orElseThrow(() -> new ResourceNotFoundException("Target classroom not found"));
+
+            if (!targetClassroom.getClassName().equals(request.getClassName())) {
+                throw new BusinessException("Classroom's class must match target class");
+            }
+
+            if (targetClassroom.getCapacity() != null) {
+                int totalStudents = targetClassroom.getStudentIds().size() + request.getStudentIds().size();
+                if (totalStudents > targetClassroom.getCapacity()) {
+                    throw new BusinessException(
+                            String.format("Target classroom capacity exceeded. %d students would exceed capacity of %d",
+                                    totalStudents, targetClassroom.getCapacity())
+                    );
+                }
+            }
+        }
+
+        int updated = 0;
+        for (String studentId : request.getStudentIds()) {
+            Student student = getStudent(studentId);
+
+            if (student.getClassroomId() != null) {
+                removeStudentFromClassroom(student.getClassroomId(), student.getId());
+            }
+
+            student.setClassName(request.getClassName());
+            student.setClassroomId(request.getClassroomId());
+            studentRepository.save(student);
+
+            if (request.getClassroomId() != null) {
+                addStudentToClassroom(request.getClassroomId(), student.getId());
+            }
+
+            auditService.logAudit(
+                    getCurrentUserId(),
+                    getCurrentUserName(),
+                    "STUDENT_PROMOTED",
+                    "student",
+                    studentId
+            );
+
+            updated++;
+        }
+
+        evictAllCaches();
+        return updated;
+    }
+
+    // Helper methods
+    private void populateClassroomName(Student student) {
+        if (student.getClassroomId() != null) {
+            classroomRepository.findById(student.getClassroomId())
+                    .ifPresent(classroom -> student.setClassroomName(classroom.getName()));
+        }
+    }
+
+    private void validateClassroomAssignment(String classroomId, String className) {
+        Classroom classroom = classroomRepository.findById(classroomId)
+                .orElseThrow(() -> new ResourceNotFoundException("Classroom not found"));
+
+        if (!classroom.getClassName().equals(className)) {
+            throw new BusinessException("Student's class must match classroom's class");
+        }
+
+        if (classroom.getCapacity() != null && classroom.getStudentIds().size() >= classroom.getCapacity()) {
+            throw new BusinessException("Classroom is at full capacity");
+        }
+    }
+
+    private void addStudentToClassroom(String classroomId, String studentId) {
+        Classroom classroom = classroomRepository.findById(classroomId)
+                .orElseThrow(() -> new ResourceNotFoundException("Classroom not found"));
+
+        if (!classroom.getStudentIds().contains(studentId)) {
+            classroom.getStudentIds().add(studentId);
+            classroomRepository.save(classroom);
+        }
+    }
+
+    private void removeStudentFromClassroom(String classroomId, String studentId) {
+        Classroom classroom = classroomRepository.findById(classroomId)
+                .orElseThrow(() -> new ResourceNotFoundException("Classroom not found"));
+
+        classroom.getStudentIds().remove(studentId);
+        classroomRepository.save(classroom);
+    }
+
+    private void evictAllCaches() {
+        try {
+            cacheManager.getCacheNames().forEach(cacheName -> {
+                try {
+                    cacheManager.getCache(cacheName).clear();
+                    log.debug("Cleared cache: {}", cacheName);
+                } catch (Exception e) {
+                    log.warn("Could not clear cache: {}", cacheName, e);
+                }
+            });
+        } catch (Exception e) {
+            log.error("Failed to clear all caches", e);
+        }
+    }
+
     private String getCurrentUserId() {
-        // Implementation will get from SecurityContext
         return "system";
     }
 
     private String getCurrentUserName() {
-        // Implementation will get from SecurityContext
         return "system";
     }
 }

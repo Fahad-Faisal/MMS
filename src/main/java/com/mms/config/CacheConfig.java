@@ -22,6 +22,7 @@ public class CacheConfig {
                 "students",
                 "student",
                 "classrooms",
+                "classroom",
                 "dashboard",
                 "defaulters",
                 "users",
@@ -30,7 +31,6 @@ public class CacheConfig {
                 "balance",
                 "attendance",
                 "receipts",
-                "classes",
                 "team"
         ));
         cacheManager.setCaffeine(Caffeine.newBuilder()

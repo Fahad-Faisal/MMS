@@ -1,3 +1,4 @@
+// src/main/java/com/mms/entity/Classroom.java
 package com.mms.entity;
 
 import jakarta.persistence.*;
@@ -33,6 +34,9 @@ public class Classroom {
 
     @Column(name = "teacher_name")
     private String teacherName;
+
+    @Column(name = "capacity")
+    private Integer capacity;  // NEW: Max students allowed
 
     @ElementCollection
     @CollectionTable(name = "classroom_students", joinColumns = @JoinColumn(name = "classroom_id"))

@@ -22,6 +22,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -195,13 +196,42 @@ public class UserService {
         log.info("User deleted successfully: {}", id);
     }
 
+    // src/main/java/com/mms/service/UserService.java
+// Fix the getTeamMembers method - add logging and debug
+
     @Cacheable(value = "team")
     public List<User> getTeamMembers() {
-        log.debug("Fetching team members from database");
-        return userRepository.findAll().stream()
-                .filter(User::isActive)
-                .filter(u -> u.getRole() != Role.ADMINISTRATOR)
-                .toList();
+        try {
+            log.info("Fetching team members for public display");
+
+            // Get all users
+            List<User> allUsers = userRepository.findAll();
+            log.info("Total users in database: {}", allUsers.size());
+
+            // Filter active users
+            List<User> activeUsers = allUsers.stream()
+                    .filter(User::isActive)
+                    .collect(Collectors.toList());
+            log.info("Active users: {}", activeUsers.size());
+
+            // Optionally filter out ADMINISTRATOR for public view
+            List<User> teamMembers = activeUsers.stream()
+                    .filter(u -> u.getRole() != Role.ADMINISTRATOR)
+                    .collect(Collectors.toList());
+            log.info("Team members after role filter: {}", teamMembers.size());
+
+            // Log each team member for debugging
+            for (User user : teamMembers) {
+                log.info("Team member: {} - Role: {} - Active: {}",
+                        user.getFullName(), user.getRole(), user.isActive());
+            }
+
+            return teamMembers;
+
+        } catch (Exception e) {
+            log.error("Error fetching team members", e);
+            return List.of();
+        }
     }
 
     // Manual cache clearing method
@@ -243,4 +273,5 @@ public class UserService {
         }
         return "system";
     }
+
 }

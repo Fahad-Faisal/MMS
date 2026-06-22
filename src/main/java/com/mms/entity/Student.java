@@ -1,3 +1,4 @@
+// src/main/java/com/mms/entity/Student.java
 package com.mms.entity;
 
 import com.mms.enums.StudentStatus;
@@ -44,6 +45,9 @@ public class Student {
     @Column(name = "classroom_id")
     private String classroomId;
 
+    @Transient  // Not stored in database - populated on read
+    private String classroomName;
+
     @Column(length = 20)
     private String guardianPhone;
 
@@ -73,4 +77,9 @@ public class Student {
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
+
+    // Helper method to populate classroomName from classroom
+    public void setClassroomName(String classroomName) {
+        this.classroomName = classroomName;
+    }
 }

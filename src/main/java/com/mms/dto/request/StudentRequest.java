@@ -23,6 +23,7 @@ public class StudentRequest {
 
     @NotBlank(message = "Class name is required")
     private String className;
+    private String classroomId;
 
     private String guardianPhone;
     private String guardianEmail;

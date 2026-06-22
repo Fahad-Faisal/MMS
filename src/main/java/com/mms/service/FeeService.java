@@ -3,9 +3,11 @@ package com.mms.service;
 
 import com.mms.dto.request.MonthlyInvoiceRequest;
 import com.mms.dto.response.DefaulterResponse;
+import com.mms.entity.Classroom;
 import com.mms.entity.LedgerEntry;
 import com.mms.entity.Student;
 import com.mms.enums.LedgerEntryType;
+import com.mms.repository.ClassroomRepository;
 import com.mms.repository.LedgerEntryRepository;
 import com.mms.repository.StudentRepository;
 import lombok.RequiredArgsConstructor;
@@ -21,12 +23,15 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
 public class FeeService {
     private final LedgerEntryRepository ledgerRepository;
     private final StudentRepository studentRepository;
+    private final ClassroomRepository classroomRepository;
     private final AuditService auditService;
 
     @Transactional
@@ -98,10 +103,16 @@ public class FeeService {
         return result;
     }
 
+    // src/main/java/com/mms/service/FeeService.java
+
     @Cacheable(value = "defaulters")
     public List<DefaulterResponse> getDefaulters() {
         List<Student> students = studentRepository.findAll();
         List<DefaulterResponse> defaulters = new ArrayList<>();
+
+        // Pre-fetch classrooms for efficiency
+        Map<String, Classroom> classroomMap = classroomRepository.findAll().stream()
+                .collect(Collectors.toMap(Classroom::getId, Function.identity()));
 
         for (Student student : students) {
             if (student.getStatus() != com.mms.enums.StudentStatus.ACTIVE) continue;
@@ -109,10 +120,22 @@ public class FeeService {
             Integer balance = ledgerRepository.getBalance(student.getId());
             if (balance != null && balance > 0) {
                 int months = Math.max(1, (int) Math.ceil((double) balance / student.getMonthlyFee()));
+
+                // Get classroom name if assigned
+                String classroomName = null;
+                if (student.getClassroomId() != null) {
+                    Classroom classroom = classroomMap.get(student.getClassroomId());
+                    if (classroom != null) {
+                        classroomName = classroom.getName();
+                    }
+                }
+
                 defaulters.add(DefaulterResponse.builder()
                         .studentId(student.getId())
                         .studentName(student.getFullName())
+                        .rollNo(student.getRollNo())  // NEW
                         .className(student.getClassName())
+                        .classroomName(classroomName)  // NEW
                         .guardianPhone(student.getGuardianPhone())
                         .overdueAmount(balance)
                         .monthsOverdue(months)

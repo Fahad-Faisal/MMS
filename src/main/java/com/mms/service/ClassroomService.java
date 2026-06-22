@@ -4,6 +4,7 @@ package com.mms.service;
 import com.mms.dto.request.ClassroomRequest;
 import com.mms.entity.Classroom;
 import com.mms.entity.Student;
+import com.mms.exception.BusinessException;
 import com.mms.exception.ResourceNotFoundException;
 import com.mms.repository.ClassroomRepository;
 import com.mms.repository.StudentRepository;
@@ -40,10 +41,17 @@ public class ClassroomService {
     @Transactional
 
     public Classroom createClassroom(ClassroomRequest request) {
+        if (request.getCapacity() != null && request.getStudentIds() != null) {
+            if (request.getStudentIds().size() > request.getCapacity()) {
+                throw new BusinessException("Cannot enroll more students than capacity");
+            }
+        }
+
         Classroom classroom = Classroom.builder()
                 .name(request.getName())
                 .className(request.getClassName())
                 .teacherId(request.getTeacherId())
+                .capacity(request.getCapacity())
                 .studentIds(request.getStudentIds() != null ? request.getStudentIds() : List.of())
                 .build();
 
@@ -71,7 +79,15 @@ public class ClassroomService {
 
     public Classroom updateClassroom(String id, ClassroomRequest request) {
         Classroom classroom = getClassroom(id);
-
+        if (request.getCapacity() != null) {
+            int currentStudents = classroom.getStudentIds().size();
+            int newStudents = request.getStudentIds() != null ? request.getStudentIds().size() : currentStudents;
+            if (newStudents > request.getCapacity()) {
+                throw new BusinessException("Cannot update capacity - " +
+                        newStudents + " students enrolled, capacity is " + request.getCapacity());
+            }
+            classroom.setCapacity(request.getCapacity());
+        }
         if (request.getName() != null) classroom.setName(request.getName());
         if (request.getClassName() != null) classroom.setClassName(request.getClassName());
         if (request.getTeacherId() != null) {
@@ -129,5 +145,15 @@ public class ClassroomService {
 
     private String getCurrentUserName() {
         return "system";
+    }
+    private void validateCapacity(Classroom classroom, List<String> newStudentIds) {
+        if (classroom.getCapacity() != null && newStudentIds != null) {
+            if (newStudentIds.size() > classroom.getCapacity()) {
+                throw new BusinessException(
+                        String.format("Cannot enroll %d students - capacity is %d",
+                                newStudentIds.size(), classroom.getCapacity())
+                );
+            }
+        }
     }
 }

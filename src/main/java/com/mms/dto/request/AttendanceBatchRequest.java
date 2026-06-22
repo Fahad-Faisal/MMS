@@ -1,3 +1,4 @@
+// src/main/java/com/mms/dto/request/AttendanceBatchRequest.java
 package com.mms.dto.request;
 
 import com.mms.enums.AttendanceSession;
@@ -17,6 +18,10 @@ public class AttendanceBatchRequest {
 
     @NotNull
     private AttendanceSession session;
+
+    private String className;
+
+    private String classroomId;  // NEW
 
     @NotEmpty
     private List<AttendanceRecord> records;

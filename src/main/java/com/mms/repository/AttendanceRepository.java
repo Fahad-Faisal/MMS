@@ -4,7 +4,6 @@ package com.mms.repository;
 import com.mms.entity.Attendance;
 import com.mms.enums.AttendanceSession;
 import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -16,27 +15,47 @@ import java.util.Optional;
 @Repository
 public interface AttendanceRepository extends JpaRepository<Attendance, String> {
 
-    // Get attendance by date and session with optional student IDs
-    @Query("SELECT a FROM Attendance a WHERE a.date = :date AND a.session = :session AND a.studentId IN :studentIds")
-    List<Attendance> findByDateAndSessionAndStudentIdIn(@Param("date") LocalDate date,
-                                                        @Param("session") AttendanceSession session,
-                                                        @Param("studentIds") List<String> studentIds);
+    // Find by date and session
+    List<Attendance> findByDateAndSession(LocalDate date, AttendanceSession session);
 
-    // Get attendance by date and session (without student filter)
-    @Query("SELECT a FROM Attendance a WHERE a.date = :date AND a.session = :session")
-    List<Attendance> findByDateAndSession(@Param("date") LocalDate date,
-                                          @Param("session") AttendanceSession session);
+    // Find by date only
+    List<Attendance> findByDate(LocalDate date);
 
-    // Get all attendance for a date (both sessions)
-    @Query("SELECT a FROM Attendance a WHERE a.date = :date")
-    List<Attendance> findByDate(@Param("date") LocalDate date);
+    // Find by session only
+    List<Attendance> findBySession(AttendanceSession session);
 
+    // Find by date, session, and student IDs
+    List<Attendance> findByDateAndSessionAndStudentIdIn(LocalDate date,
+                                                        AttendanceSession session,
+                                                        List<String> studentIds);
+
+    // Find by date and student IDs (any session)
+    @Query("SELECT a FROM Attendance a WHERE a.date = :date AND a.studentId IN :studentIds")
+    List<Attendance> findByDateAndStudentIdIn(@Param("date") LocalDate date,
+                                              @Param("studentIds") List<String> studentIds);
+
+    // Find by student IDs (any date)
+    @Query("SELECT a FROM Attendance a WHERE a.studentId IN :studentIds")
+    List<Attendance> findByStudentIdIn(@Param("studentIds") List<String> studentIds);
+
+    // Find specific student's attendance
     Optional<Attendance> findByStudentIdAndDateAndSession(String studentId,
                                                           LocalDate date,
                                                           AttendanceSession session);
 
-    @Modifying
-    @Query("DELETE FROM Attendance a WHERE a.date = :date AND a.session = :session")
-    void deleteByDateAndSession(@Param("date") LocalDate date,
-                                @Param("session") AttendanceSession session);
+    // Student attendance history
+    List<Attendance> findByStudentIdOrderByDateDesc(String studentId);
+
+    @Query("SELECT a FROM Attendance a WHERE a.studentId = :studentId AND a.date BETWEEN :from AND :to")
+    List<Attendance> findByStudentIdAndDateBetween(@Param("studentId") String studentId,
+                                                   @Param("from") LocalDate from,
+                                                   @Param("to") LocalDate to);
+
+    @Query("SELECT a FROM Attendance a WHERE a.studentId = :studentId AND a.date >= :from")
+    List<Attendance> findByStudentIdAndDateAfter(@Param("studentId") String studentId,
+                                                 @Param("from") LocalDate from);
+
+    @Query("SELECT a FROM Attendance a WHERE a.studentId = :studentId AND a.date <= :to")
+    List<Attendance> findByStudentIdAndDateBefore(@Param("studentId") String studentId,
+                                                  @Param("to") LocalDate to);
 }

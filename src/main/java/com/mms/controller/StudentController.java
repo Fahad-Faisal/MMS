@@ -1,5 +1,6 @@
 package com.mms.controller;
 
+import com.mms.dto.request.BulkClassUpdateRequest;
 import com.mms.dto.request.StudentRequest;
 import com.mms.dto.response.PaginatedResponse;
 import com.mms.entity.Student;
@@ -11,8 +12,11 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
+
+import java.util.Map;
 
 @RestController
 @RequestMapping("/students")
@@ -21,14 +25,28 @@ import org.springframework.web.multipart.MultipartFile;
 public class StudentController {
     private final StudentService studentService;
 
+    // src/main/java/com/mms/controller/StudentController.java
+
+
     @GetMapping
     public ResponseEntity<PaginatedResponse<Student>> getStudents(
             @RequestParam(required = false) String q,
             @RequestParam(required = false) String className,
+            @RequestParam(required = false) String classroomId,  // This parameter exists
             @RequestParam(required = false) String status,
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "50") int pageSize) {
-        Page<Student> students = studentService.searchStudents(q, className, status, page, pageSize);
+
+        // Call service with all 6 parameters
+        Page<Student> students = studentService.searchStudents(
+                q,           // search
+                className,   // className
+                classroomId, // classroomId  - This must be passed!
+                status,      // status
+                page,        // page
+                pageSize     // pageSize
+        );
+
         return ResponseEntity.ok(PaginatedResponse.<Student>builder()
                 .items(students.getContent())
                 .total(students.getTotalElements())
@@ -89,5 +107,14 @@ public class StudentController {
     @GetMapping("/{id}/balance")
     public ResponseEntity<?> getBalance(@PathVariable String id) {
         return ResponseEntity.ok(studentService.getBalance(id));
+    }
+    // src/main/java/com/mms/controller/StudentController.java
+
+    @PatchMapping("/bulk-class")
+    @PreAuthorize("hasAnyRole('ADMINISTRATOR', 'MUHTAMIM')")
+    public ResponseEntity<Map<String, Object>> bulkUpdateClass(
+            @RequestBody BulkClassUpdateRequest request) {
+        int updated = studentService.bulkUpdateClass(request);
+        return ResponseEntity.ok(Map.of("updated", updated));
     }
 }
