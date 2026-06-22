@@ -17,7 +17,8 @@ public class CorsConfig {
                 "http://localhost:5173",
                 "http://localhost:5174",
                 "http://localhost:3000",
-                "https://mms.netlify.app",
+                "https://mms-136.netlify.app",
+                "https://*.netlify.app",
                 "https://*.onrender.com",
                 "https://nextgen-app-builder-final-version.onrender.com",
                 "https://*.netlify.app"

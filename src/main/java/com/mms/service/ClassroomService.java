@@ -41,6 +41,34 @@ public class ClassroomService {
     @Transactional
 
     public Classroom createClassroom(ClassroomRequest request) {
+        if (request.getStudentIds() != null && !request.getStudentIds().isEmpty()) {
+            // Get all students that are already in a classroom
+            List<Student> students = studentRepository.findAllById(request.getStudentIds());
+            List<String> unavailableStudents = students.stream()
+                    .filter(s -> s.getClassroomId() != null && !s.getClassroomId().isEmpty())
+                    .map(Student::getFullName)
+                    .toList();
+
+            if (!unavailableStudents.isEmpty()) {
+                throw new BusinessException(
+                        "The following students are already assigned to a section: " +
+                                String.join(", ", unavailableStudents)
+                );
+            }
+
+            // Verify all students belong to the correct class
+            List<String> wrongClassStudents = students.stream()
+                    .filter(s -> !s.getClassName().equals(request.getClassName()))
+                    .map(Student::getFullName)
+                    .toList();
+
+            if (!wrongClassStudents.isEmpty()) {
+                throw new BusinessException(
+                        "The following students do not belong to class " + request.getClassName() +
+                                ": " + String.join(", ", wrongClassStudents)
+                );
+            }
+        }
         if (request.getCapacity() != null && request.getStudentIds() != null) {
             if (request.getStudentIds().size() > request.getCapacity()) {
                 throw new BusinessException("Cannot enroll more students than capacity");
@@ -79,6 +107,39 @@ public class ClassroomService {
 
     public Classroom updateClassroom(String id, ClassroomRequest request) {
         Classroom classroom = getClassroom(id);
+        // Validate student assignments
+        if (request.getStudentIds() != null) {
+            // Check for students that are already in other classrooms
+            List<Student> students = studentRepository.findAllById(request.getStudentIds());
+            List<String> unavailableStudents = students.stream()
+                    .filter(s -> s.getClassroomId() != null &&
+                            !s.getClassroomId().equals(id) &&
+                            !s.getClassroomId().isEmpty())
+                    .map(Student::getFullName)
+                    .toList();
+
+            if (!unavailableStudents.isEmpty()) {
+                throw new BusinessException(
+                        "The following students are already assigned to another section: " +
+                                String.join(", ", unavailableStudents)
+                );
+            }
+
+            // Verify all students belong to the correct class
+            String className = request.getClassName() != null ?
+                    request.getClassName() : classroom.getClassName();
+            List<String> wrongClassStudents = students.stream()
+                    .filter(s -> !s.getClassName().equals(className))
+                    .map(Student::getFullName)
+                    .toList();
+
+            if (!wrongClassStudents.isEmpty()) {
+                throw new BusinessException(
+                        "The following students do not belong to class " + className +
+                                ": " + String.join(", ", wrongClassStudents)
+                );
+            }
+        }
         if (request.getCapacity() != null) {
             int currentStudents = classroom.getStudentIds().size();
             int newStudents = request.getStudentIds() != null ? request.getStudentIds().size() : currentStudents;

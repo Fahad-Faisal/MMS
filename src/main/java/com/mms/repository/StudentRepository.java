@@ -33,4 +33,32 @@ public interface StudentRepository extends JpaRepository<Student, String> {
                                  Pageable pageable);
 
     List<Student> findByStatus(StudentStatus status);
+
+
+    // NEW: Find students by class who are NOT enrolled in any classroom
+    @Query("SELECT s FROM Student s WHERE " +
+            "s.className = :className AND " +
+            "(s.classroomId IS NULL OR s.classroomId = '') AND " +
+            "s.status = :status")
+    List<Student> findAvailableStudentsForClass(@Param("className") String className,
+                                                @Param("status") StudentStatus status);
+
+    // NEW: Find students by class who are enrolled in a specific classroom
+    @Query("SELECT s FROM Student s WHERE " +
+            "s.className = :className AND " +
+            "s.classroomId = :classroomId AND " +
+            "s.status = :status")
+    List<Student> findStudentsByClassAndClassroom(@Param("className") String className,
+                                                  @Param("classroomId") String classroomId,
+                                                  @Param("status") StudentStatus status);
+
+    // NEW: Find students by class excluding those in a specific classroom
+    @Query("SELECT s FROM Student s WHERE " +
+            "s.className = :className AND " +
+            "(s.classroomId IS NULL OR s.classroomId != :classroomId) AND " +
+            "s.status = :status")
+    List<Student> findAvailableStudentsForClassExcludingClassroom(
+            @Param("className") String className,
+            @Param("classroomId") String classroomId,
+            @Param("status") StudentStatus status);
 }

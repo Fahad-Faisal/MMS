@@ -283,6 +283,32 @@ public class StudentService {
         evictAllCaches();
         return updated;
     }
+    /**
+     * Get students available for a class (not enrolled in any section)
+     */
+    public List<Student> getAvailableStudentsForClass(String className) {
+        log.info("Getting available students for class: {}", className);
+        return studentRepository.findAvailableStudentsForClass(className, StudentStatus.ACTIVE);
+    }
+
+    /**
+     * Get students available for a class excluding those already in a specific classroom
+     * (Used when editing a classroom)
+     */
+    public List<Student> getAvailableStudentsForClassExcludingClassroom(String className, String classroomId) {
+        log.info("Getting available students for class: {} excluding classroom: {}", className, classroomId);
+        return studentRepository.findAvailableStudentsForClassExcludingClassroom(
+                className, classroomId, StudentStatus.ACTIVE
+        );
+    }
+
+    /**
+     * Get students already enrolled in a specific classroom
+     */
+    public List<Student> getStudentsByClassAndClassroom(String className, String classroomId) {
+        log.info("Getting students for class: {} and classroom: {}", className, classroomId);
+        return studentRepository.findStudentsByClassAndClassroom(className, classroomId, StudentStatus.ACTIVE);
+    }
 
     // Helper methods
     private void populateClassroomName(Student student) {
